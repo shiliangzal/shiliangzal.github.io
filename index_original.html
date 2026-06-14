@@ -1863,7 +1863,7 @@
         <article class="work-card work-card-video" data-category="aerial" data-reveal data-reveal-dir="up" style="transition-delay:0ms">
           <div class="work-card-image">
             <div class="video-cover" data-video-src="assets/videos/aerial-5-27.mp4" data-video-title="航拍 · 5月27日">
-              <video src="assets/videos/aerial-5-27.mp4" muted loop playsinline preload="metadata" data-cover-video></video>
+              <video src="assets/videos/aerial-5-27.mp4" muted loop playsinline preload="none" data-cover-video data-lazy-video poster="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 9'><rect fill='%23f0a050' width='16' height='9'/></svg>"></video>
               <span class="aerial-badge">🚁 航拍</span>
             </div>
           </div>
@@ -1879,7 +1879,7 @@
           <div class="work-card-image">
             <div class="yunnan-video-grid" id="yunnanVideoGrid">
               <div class="yunnan-video-cell yvc-1" data-video-src="assets/videos/yunnan-2dian.mp4" data-video-title="2Dian">
-                <video src="assets/videos/yunnan-2dian.mp4" muted loop playsinline preload="metadata" data-cover-video></video>
+                <video src="assets/videos/yunnan-2dian.mp4" muted loop playsinline preload="none" data-cover-video data-lazy-video></video>
                 <div class="yvc-overlay">
                   <span class="yvc-label">2Dian</span>
                   <span class="yvc-meta">剪辑片段 · 32s</span>
@@ -1887,7 +1887,7 @@
                 <span class="yvc-play" aria-hidden="true">▶</span>
               </div>
               <div class="yunnan-video-cell yvc-2" data-video-src="assets/videos/yunnan-compose.mp4" data-video-title="合成片段">
-                <video src="assets/videos/yunnan-compose.mp4" muted loop playsinline preload="metadata" data-cover-video></video>
+                <video src="assets/videos/yunnan-compose.mp4" muted loop playsinline preload="none" data-cover-video data-lazy-video></video>
                 <div class="yvc-overlay">
                   <span class="yvc-label">合成片段</span>
                   <span class="yvc-meta">调色转场 · 24s</span>
@@ -1895,7 +1895,7 @@
                 <span class="yvc-play" aria-hidden="true">▶</span>
               </div>
               <div class="yunnan-video-cell yvc-3" data-video-src="assets/videos/yunnan-shoot2.mp4" data-video-title="拍摄②">
-                <video src="assets/videos/yunnan-shoot2.mp4" muted loop playsinline preload="metadata" data-cover-video></video>
+                <video src="assets/videos/yunnan-shoot2.mp4" muted loop playsinline preload="none" data-cover-video data-lazy-video></video>
                 <div class="yvc-overlay">
                   <span class="yvc-label">拍摄②</span>
                   <span class="yvc-meta">原始素材 · 48s</span>
@@ -2019,7 +2019,7 @@
         <article class="work-card work-card-video" data-category="video" data-reveal data-reveal-dir="up" style="transition-delay:400ms">
           <div class="work-card-image">
             <div class="video-cover" data-video-src="https://www.w3schools.com/html/movie.mp4" data-video-title="5个提升工作效率的隐藏技巧">
-              <video src="https://www.w3schools.com/html/movie.mp4" muted loop playsinline preload="metadata" data-cover-video></video>
+              <video src="https://www.w3schools.com/html/movie.mp4" muted loop playsinline preload="none" data-cover-video data-lazy-video></video>
             </div>
           </div>
           <div class="work-card-body">
@@ -2522,16 +2522,57 @@
       });
 
       // Hover-to-play on cover videos (loop preview)
+      // For data-lazy-video: only call .load() on first hover to avoid
+      // 80MB+ preload on initial page load.
       videoCards.forEach(function(cover) {
         var cv = cover.querySelector('[data-cover-video]');
         if (!cv) return;
+        var loaded = false;
         cover.addEventListener('mouseenter', function() {
-          try { cv.currentTime = 0; cv.play().catch(function(){}); } catch (e) {}
+          if (cv.dataset.lazyVideo !== undefined && !loaded) {
+            loaded = true;
+            try { cv.load(); } catch (e) {}
+            cv.addEventListener('loadeddata', function playOnce() {
+              try { cv.play().catch(function(){}); } catch (e) {}
+              cv.removeEventListener('loadeddata', playOnce);
+            });
+          } else {
+            try { cv.currentTime = 0; cv.play().catch(function(){}); } catch (e) {}
+          }
         });
         cover.addEventListener('mouseleave', function() {
           try { cv.pause(); cv.currentTime = 0; } catch (e) {}
         });
       });
+
+      // === Lazy video load for ALL data-lazy-video elements ===
+      // Load only when card scrolls into view, then play
+      if ('IntersectionObserver' in window) {
+        var lazyObserver = new IntersectionObserver(function(entries) {
+          entries.forEach(function(entry) {
+            if (!entry.isIntersecting) return;
+            var v = entry.target;
+            // Skip if already started loading
+            if (v.dataset.lazyLoaded === '1') return;
+            v.dataset.lazyLoaded = '1';
+            try {
+              v.load();
+              v.addEventListener('loadeddata', function() {
+                var p = v.play(); if (p && p.catch) p.catch(function(){});
+              });
+            } catch (e) {}
+            lazyObserver.unobserve(v);
+          });
+        }, { rootMargin: '200px 0px', threshold: 0.01 });
+        document.querySelectorAll('video[data-lazy-video]').forEach(function(v) {
+          lazyObserver.observe(v);
+        });
+      } else {
+        // Fallback: load all immediately
+        document.querySelectorAll('video[data-lazy-video]').forEach(function(v) {
+          try { v.load(); v.play().catch(function(){}); } catch (e) {}
+        });
+      }
 
       // Compute the rect of the clicked card and convert to translate offsets
       // for the zoom-from-card animation
